@@ -1,0 +1,375 @@
+C51 COMPILER V9.00   控溫                                                                  01/28/2018 19:39:09 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE 控溫
+OBJECT MODULE PLACED IN 控溫.OBJ
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE 控溫.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <math.h>
+   3          #include"XPT2046.h"
+   4          #define uint unsigned int
+   5          #define uchar unsigned char
+   6          
+   7          void delay(uint i)
+   8          {
+   9   1              while(i--);     
+  10   1      }
+  11          
+  12          uint code table[13]={0x3f,0x06,0x5b,0x4f,
+  13                                                   0x66,0x6d,0x7d,0x07,
+  14                                           0x7f,0x6f,0x80,0x40,0x00};
+  15          //數碼管位選與段選
+  16          sbit LSA=P2^2;
+  17          sbit LSB=P2^3;
+  18          sbit LSC=P2^4;
+  19          //數碼管段選用P0口
+  20          //矩陣按鍵P1
+  21          
+  22          sbit beep=P2^0;
+  23          
+  24          double catch();
+  25          uint keyscan();
+  26          void display(double sum);
+  27          
+  28          
+  29          uchar DisplayData[8];
+  30          
+  31          double datapros(int temp)        
+  32          {
+  33   1              float tp;
+  34   1              double yad;
+  35   1      //      int bk;  
+  36   1              if(temp< 0)                             //当温度值为负数
+  37   1              {
+  38   2                      DisplayData[0] = 0x40; 
+  39   2                      temp=temp-1;
+  40   2                      temp=~temp;
+  41   2                      tp=temp;
+  42   2                      temp=tp*0.0625*100;//+0.5;      
+  43   2              }
+  44   1              else
+  45   1              {                       
+  46   2                      DisplayData[0] = 0x00;
+  47   2                      tp=temp;
+  48   2                      temp=tp*0.0625*100;//+0.5;      
+  49   2              }
+  50   1      
+  51   1              yad=(double)temp/100;
+  52   1      //      bk = (int)((yad - (int)yad) * 10 + 0.50000001);   //四舍五入保留一位小數
+  53   1      //      yad = (double)bk / 10 + (int)yad;
+  54   1      //      temp=yad*100;
+  55   1      
+C51 COMPILER V9.00   控溫                                                                  01/28/2018 19:39:09 PAGE 2   
+
+  56   1              DisplayData[1] = table[temp / 10000];
+  57   1              DisplayData[2] = table[temp % 10000 / 1000];
+  58   1              DisplayData[3] = table[temp % 1000 / 100] | 0x80;
+  59   1              DisplayData[4] = table[temp % 100 / 10];
+  60   1              DisplayData[5] = table[temp % 10];
+  61   1      
+  62   1              if(temp<0)
+  63   1                      yad=-yad;
+  64   1      
+  65   1              return yad;
+  66   1      }
+  67          
+  68          void DigDisplay()
+  69          {
+  70   1              uchar i;
+  71   1              for(i=0;i<6;i++)
+  72   1              {
+  73   2                      switch(i)        //位选，选择点亮的数码管，
+  74   2                      {
+  75   3                              case(0):
+  76   3                                      LSA=0;LSB=0;LSC=0; break;//显示第0位
+  77   3                              case(1):
+  78   3                                      LSA=1;LSB=0;LSC=0; break;//显示第1位
+  79   3                              case(2):
+  80   3                                      LSA=0;LSB=1;LSC=0; break;//显示第2位
+  81   3                              case(3):
+  82   3                                      LSA=1;LSB=1;LSC=0; break;//显示第3位
+  83   3                              case(4):
+  84   3                                      LSA=0;LSB=0;LSC=1; break;//显示第4位
+  85   3                              case(5):
+  86   3                                      LSA=1;LSB=0;LSC=1; break;//显示第5位    
+  87   3                      }
+  88   2                      P0=DisplayData[i];//发送数据
+  89   2                      delay(100); //间隔一段时间扫描  
+  90   2                      P0=0x00;//消隐
+  91   2              }               
+  92   1      }
+  93          
+  94          int main()
+  95          {
+  96   1              int k;
+  97   1              double sum,now;
+  98   1              do{
+  99   2              sum=catch();
+ 100   2              }while(sum>50||sum<-10);
+ 101   1              for(k=500;k>0;k--)
+ 102   1              {
+ 103   2                       beep=~beep;
+ 104   2                       delay(50);
+ 105   2              }
+ 106   1              display(sum);   
+ 107   1              while(1)
+ 108   1              {
+ 109   2                      now=datapros(Ds18b20ReadTemp());//数据处理函数
+ 110   2                      DigDisplay();                                   //数码管显示函数                
+ 111   2              }
+ 112   1              return 0;
+ 113   1      }
+ 114          
+ 115          //鍵盤數據顯示錄入
+ 116          double catch()
+ 117          {
+C51 COMPILER V9.00   控溫                                                                  01/28/2018 19:39:09 PAGE 3   
+
+ 118   1              double sum=0;
+ 119   1              int ak;
+ 120   1              uint get,i=0,j=0,flag=0;
+ 121   1              uint ic=0,ll=0,cast;
+ 122   1              uint cao[8]={12,12,12,12,12,12,12,12};
+ 123   1              while(1)
+ 124   1              {       
+ 125   2                      get=keyscan();
+ 126   2                      if(j==8||get==13)       
+ 127   2                      {       P0=0;break;  }
+ 128   2                      if(get==11)
+ 129   2                              {
+ 130   3                                      flag++;
+ 131   3                                      for(cast=ll;cast>=1;cast--)
+ 132   3                                      {
+ 133   4                                              cao[cast]=cao[cast-1];
+ 134   4                                      }
+ 135   3                                      cao[0]=11;
+ 136   3                                      j--;
+ 137   3                              }
+ 138   2                  if(get==10)
+ 139   2                          { i=j; j--; }
+ 140   2                      if(get<10)
+ 141   2                      {
+ 142   3                              sum=10*sum+(double)get;
+ 143   3                      }
+ 144   2                      if(get<12)
+ 145   2                      {
+ 146   3                              if(get!=11)
+ 147   3                                      cao[ll]=get;
+ 148   3                              j++;
+ 149   3                              ll++;
+ 150   3                      }
+ 151   2                      switch(ic)       //位选，选择点亮的数码管，
+ 152   2                      {
+ 153   3                              case 0:
+ 154   3                                      LSA=0;LSB=0;LSC=0;P0=table[cao[0]]; break;//显示第0位                   
+ 155   3                              case 1:
+ 156   3                                      LSA=1;LSB=0;LSC=0;P0=table[cao[1]]; break;//显示第1位
+ 157   3                              case 2:
+ 158   3                                      LSA=0;LSB=1;LSC=0;P0=table[cao[2]]; break;//显示第2位
+ 159   3                              case 3:
+ 160   3                                      LSA=1;LSB=1;LSC=0;P0=table[cao[3]]; break;//显示第3位
+ 161   3                              case 4:
+ 162   3                                      LSA=0;LSB=0;LSC=1;P0=table[cao[4]]; break;//显示第4位
+ 163   3                              case 5:
+ 164   3                                      LSA=1;LSB=0;LSC=1;P0=table[cao[5]]; break;//显示第5位
+ 165   3                              case 6:
+ 166   3                                      LSA=0;LSB=1;LSC=1;P0=table[cao[6]]; break;//显示第6位
+ 167   3                              case 7:
+ 168   3                                      LSA=1;LSB=1;LSC=1;P0=table[cao[7]]; break;//显示第7位   
+ 169   3                      }
+ 170   2                      delay(100);     
+ 171   2                      ic++;
+ 172   2                      if(ic==8)
+ 173   2                      ic=0;
+ 174   2              }
+ 175   1              if(i)
+ 176   1                      sum=sum/pow(10,j-i);  //
+ 177   1      
+ 178   1              ak = (int)((sum - (int)sum) * 10 + 0.50000001);   //四舍五入保留一位小數
+ 179   1              sum = (double)ak / 10 + (int)sum;
+C51 COMPILER V9.00   控溫                                                                  01/28/2018 19:39:09 PAGE 4   
+
+ 180   1                      
+ 181   1              if(flag%2==1)
+ 182   1                      sum=-sum;
+ 183   1      
+ 184   1              return sum;
+ 185   1      }
+ 186          
+ 187          //檢測矩陣按鍵
+ 188          uint keyscan()
+ 189          {
+ 190   1              uint num=12;
+ 191   1              uint temp;
+ 192   1              P1=0xfe;   //first line
+ 193   1              temp=P1;
+ 194   1              temp=temp&0xf0;
+ 195   1              temp=temp&0xf0;
+ 196   1              while(temp!=0xf0)
+ 197   1              {
+ 198   2                      delay(1000);
+ 199   2                      temp=P1;
+ 200   2                      temp&=0xf0;
+ 201   2                      while(temp!=0xf0)
+ 202   2                      {
+ 203   3                              temp=P1;
+ 204   3                              switch(temp)
+ 205   3                              {
+ 206   4                                      case 0xee:num=1;
+ 207   4                                              break;
+ 208   4                                      case 0xde:num=2;
+ 209   4                                              break;
+ 210   4                                      case 0xbe:num=3;
+ 211   4                                              break;
+ 212   4                                      case 0x7e:num=4;
+ 213   4                                              break;
+ 214   4                              }
+ 215   3                              while(temp!=0xf0)
+ 216   3                              {
+ 217   4                                      temp=P1;
+ 218   4                                      temp=temp&0xf0;
+ 219   4                              }
+ 220   3                      }
+ 221   2              }
+ 222   1              P1=0xfd;           //second line
+ 223   1              temp=P1;
+ 224   1              temp=temp&0xf0;
+ 225   1              temp=temp&0xf0;
+ 226   1              while(temp!=0xf0)
+ 227   1              {
+ 228   2                      delay(1000);
+ 229   2                      temp=P1;
+ 230   2                      temp&=0xf0;
+ 231   2                      while(temp!=0xf0)
+ 232   2                      {
+ 233   3                              temp=P1;
+ 234   3                              switch(temp)
+ 235   3                              {
+ 236   4                                      case 0xed:num=5;
+ 237   4                                              break;
+ 238   4                                      case 0xdd:num=6;
+ 239   4                                              break;
+ 240   4                                      case 0xbd:num=7;
+ 241   4                                              break;
+C51 COMPILER V9.00   控溫                                                                  01/28/2018 19:39:09 PAGE 5   
+
+ 242   4                                      case 0x7d:num=8;
+ 243   4                                              break;
+ 244   4                              }
+ 245   3                              while(temp!=0xf0)
+ 246   3                              {
+ 247   4                                      temp=P1;
+ 248   4                                      temp=temp&0xf0;
+ 249   4                              }
+ 250   3                      }
+ 251   2              }
+ 252   1              P1=0xfb;                //third line
+ 253   1              temp=P1;
+ 254   1              temp=temp&0xf0;
+ 255   1              temp=temp&0xf0;
+ 256   1              while(temp!=0xf0)
+ 257   1              {
+ 258   2                      delay(1000);
+ 259   2                      temp=P1;
+ 260   2                      temp&=0xf0;
+ 261   2                      while(temp!=0xf0)
+ 262   2                      {
+ 263   3                              temp=P1;
+ 264   3                              switch(temp)
+ 265   3                              {
+ 266   4                                      case 0xeb:num=9;
+ 267   4                                              break;
+ 268   4                                      case 0xdb:num=0;
+ 269   4                                              break;
+ 270   4                                      case 0xbb:num=10; //小數點
+ 271   4                                              break;
+ 272   4                                      case 0x7b:num=11;         //負號
+ 273   4                                              break;
+ 274   4                              }
+ 275   3                              while(temp!=0xf0)
+ 276   3                              {
+ 277   4                                      temp=P1;
+ 278   4                                      temp=temp&0xf0;
+ 279   4                              }
+ 280   3                      }
+ 281   2              }
+ 282   1              P1=0xf7;                //third line
+ 283   1              temp=P1;
+ 284   1              temp=temp&0xf0;
+ 285   1              temp=temp&0xf0;
+ 286   1              while(temp!=0xf0)
+ 287   1              {
+ 288   2                      delay(1000);
+ 289   2                      temp=P1;
+ 290   2                      temp&=0xf0;
+ 291   2                      while(temp!=0xf0)
+ 292   2                      {
+ 293   3                              temp=P1;
+ 294   3                              switch(temp)
+ 295   3                              {
+ 296   4                                      case 0xe7:num=13;  //確定按鍵
+ 297   4                                              break;
+ 298   4                              }
+ 299   3                              while(temp!=0xf0)
+ 300   3                              {
+ 301   4                                      temp=P1;
+ 302   4                                      temp=temp&0xf0;
+ 303   4                              }
+C51 COMPILER V9.00   控溫                                                                  01/28/2018 19:39:09 PAGE 6   
+
+ 304   3                      }
+ 305   2              }
+ 306   1              return num;
+ 307   1      }
+ 308          
+ 309          
+ 310          void display(double sum)
+ 311          {
+ 312   1              uchar i;
+ 313   1              uint tt=500;
+ 314   1              uint smg[4];
+ 315   1              if(sum<0)
+ 316   1              {       smg[0]=table[11]; sum=-sum;     }
+ 317   1              else
+ 318   1                      smg[0]=table[12];
+ 319   1              smg[1]=table[(int)sum/10];
+ 320   1              smg[2]=table[(int)sum%10]|0x80;
+ 321   1              smg[3]=table[(int)(10*sum)%10];
+ 322   1              while(tt--)
+ 323   1              {
+ 324   2              for(i=0;i<4;i++)
+ 325   2              {
+ 326   3                      switch(i)
+ 327   3                      {
+ 328   4                              case(0):
+ 329   4                                      LSA=0;LSB=0;LSC=0; break;
+ 330   4                              case(1):
+ 331   4                                      LSA=1;LSB=0;LSC=0; break;
+ 332   4                              case(2):
+ 333   4                                      LSA=0;LSB=1;LSC=0; break;
+ 334   4                              case(3):
+ 335   4                                      LSA=1;LSB=1;LSC=0; break;
+ 336   4                      }
+ 337   3                      P0=smg[i];
+ 338   3                      delay(100);
+ 339   3                      P0=0;
+ 340   3              }
+ 341   2              }               
+ 342   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2091    ----
+   CONSTANT SIZE    =     42    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      8      69
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,435 @@
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 1   
+
+
+C51 COMPILER V9.59.0.0, COMPILATION OF MODULE PWM
+OBJECT MODULE PLACED IN pwm.OBJ
+COMPILER INVOKED BY: D:\Zkeil5\C51\BIN\C51.EXE pwm.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <math.h>
+   3          #include"HEADFILE.H"
+   4          #define uint unsigned int
+   5          #define uchar unsigned char
+   6          
+   7          void delay(uint i)
+   8          {
+   9   1        while(i--); 
+  10   1      }
+  11          
+  12          uint code table[13]={0x3f,0x06,0x5b,0x4f,
+  13                     0x66,0x6d,0x7d,0x07,
+  14                         0x7f,0x6f,0x80,0x40,0x00};
+  15          
+  16          //數碼管位選與段選
+  17          sbit LSA=P2^2;
+  18          sbit LSB=P2^3;
+  19          sbit LSC=P2^4;
+  20          //數碼管段選用P0口
+  21          //矩陣按鍵P1
+  22          sbit PWM=P2^1;
+  23          
+  24          sbit beep=P2^0;
+  25          
+  26          double catch();
+  27          uint keyscan();
+  28          void display(double sum);
+  29          void boil(uint rate);
+  30          void Timer1Init();
+  31          
+  32          uint timer1;
+  33          
+  34          double datapros(int temp)    
+  35          {
+  36   1          float tp;
+  37   1        double yad;
+  38   1      //  int bk;  
+  39   1        if(temp< 0)       //当温度值为负数
+  40   1          { 
+  41   2          temp=temp-1;
+  42   2          temp=~temp;
+  43   2          tp=temp;
+  44   2          temp=tp*0.0625*100;//+0.5;  
+  45   2          }
+  46   1        else
+  47   1          {
+  48   2          tp=temp;
+  49   2          temp=tp*0.0625*100;//+0.5;  
+  50   2        }
+  51   1      
+  52   1        yad=(double)temp/100;
+  53   1      
+  54   1        if(temp<0)
+  55   1          yad=-yad;
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 2   
+
+  56   1      
+  57   1        return yad;
+  58   1      }
+  59          
+  60          void redisplay(double sum)
+  61          {
+  62   1        uchar i;
+  63   1        uint tt=500;
+  64   1        uint smg[4];
+  65   1        if(sum<0)
+  66   1        { smg[0]=table[11]; sum=-sum; }
+  67   1        else
+  68   1          smg[0]=table[12];
+  69   1        smg[1]=table[(int)sum/10];
+  70   1        smg[2]=table[(int)sum%10]|0x80;
+  71   1        smg[3]=table[(int)(10*sum)%10];
+  72   1        while(tt--)
+  73   1        {
+  74   2        for(i=0;i<4;i++)
+  75   2        {
+  76   3          switch(i)
+  77   3          {
+  78   4            case(0):
+  79   4              LSA=0;LSB=0;LSC=0; break;
+  80   4            case(1):
+  81   4              LSA=1;LSB=0;LSC=0; break;
+  82   4            case(2):
+  83   4              LSA=0;LSB=1;LSC=0; break;
+  84   4            case(3):
+  85   4              LSA=1;LSB=1;LSC=0; break;
+  86   4          }
+  87   3          P0=smg[i];
+  88   3          delay(10);
+  89   3          P0=0;
+  90   3        }
+  91   2        }   
+  92   1      }
+  93          
+  94          int main()
+  95          {
+  96   1        int k;
+  97   1        double sum,now;
+  98   1        do{
+  99   2        sum=catch();
+ 100   2        }while(sum>50);
+ 101   1        for(k=500;k>0;k--)
+ 102   1        {
+ 103   2           beep=~beep;
+ 104   2           delay(50);
+ 105   2        }
+ 106   1        display(sum); 
+ 107   1        while(1)
+ 108   1        {
+ 109   2          now=datapros(Ds18b20ReadTemp());//数据处理函数
+ 110   2          redisplay(now);
+ 111   2          if(now>=sum)
+ 112   2            boil(0);      
+ 113   2          else if(sum-now>12)
+ 114   2            boil(100);
+ 115   2          else if(sum-now>8)
+ 116   2            boil(80);
+ 117   2          else if(sum-now<=4)
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 3   
+
+ 118   2            boil(5);
+ 119   2        };
+ 120   1        return 0;
+ 121   1      }
+ 122          
+ 123          //鍵盤數據顯示錄入
+ 124          double catch()
+ 125          {
+ 126   1        double sum=0;
+ 127   1        int ak;
+ 128   1        uint get,i=0,j=0,flag=0;
+ 129   1        uint ic=0,ll=0,cast;
+ 130   1        uint cao[8]={12,12,12,12,12,12,12,12};
+ 131   1        while(1)
+ 132   1        { 
+ 133   2          get=keyscan();
+ 134   2          if(j==8||get==13) 
+ 135   2          { P0=0;break;  }
+ 136   2          if(get==11)
+ 137   2            {
+ 138   3              flag++;
+ 139   3              for(cast=ll;cast>=1;cast--)
+ 140   3              {
+ 141   4                cao[cast]=cao[cast-1];
+ 142   4              }
+ 143   3              cao[0]=11;
+ 144   3              j--;
+ 145   3            }
+ 146   2            if(get==10)
+ 147   2              { i=j; j--; }
+ 148   2          if(get<10)
+ 149   2          {
+ 150   3            sum=10*sum+(double)get;
+ 151   3          }
+ 152   2          if(get<12)
+ 153   2          {
+ 154   3            if(get!=11)
+ 155   3              cao[ll]=get;
+ 156   3            j++;
+ 157   3            ll++;
+ 158   3          }
+ 159   2          switch(ic)   //位选，选择点亮的数码管，
+ 160   2          {
+ 161   3            case 0:
+ 162   3              LSA=0;LSB=0;LSC=0;P0=table[cao[0]]; break;//显示第0位     
+ 163   3            case 1:
+ 164   3              LSA=1;LSB=0;LSC=0;P0=table[cao[1]]; break;//显示第1位
+ 165   3            case 2:
+ 166   3              LSA=0;LSB=1;LSC=0;P0=table[cao[2]]; break;//显示第2位
+ 167   3            case 3:
+ 168   3              LSA=1;LSB=1;LSC=0;P0=table[cao[3]]; break;//显示第3位
+ 169   3            case 4:
+ 170   3              LSA=0;LSB=0;LSC=1;P0=table[cao[4]]; break;//显示第4位
+ 171   3            case 5:
+ 172   3              LSA=1;LSB=0;LSC=1;P0=table[cao[5]]; break;//显示第5位
+ 173   3            case 6:
+ 174   3              LSA=0;LSB=1;LSC=1;P0=table[cao[6]]; break;//显示第6位
+ 175   3            case 7:
+ 176   3              LSA=1;LSB=1;LSC=1;P0=table[cao[7]]; break;//显示第7位 
+ 177   3          }
+ 178   2          delay(100); 
+ 179   2          ic++;
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 4   
+
+ 180   2          if(ic==8)
+ 181   2          ic=0;
+ 182   2        }
+ 183   1        if(i)
+ 184   1          sum=sum/pow(10,j-i);  //
+ 185   1      
+ 186   1        ak = (int)((sum - (int)sum) * 10 + 0.50000001);   //四舍五入保留一位小數
+ 187   1        sum = (double)ak / 10 + (int)sum;
+ 188   1          
+ 189   1        if(flag%2==1)
+ 190   1          sum=-sum;
+ 191   1      
+ 192   1        return sum;
+ 193   1      }
+ 194          
+ 195          //檢測矩陣按鍵
+ 196          uint keyscan()
+ 197          {
+ 198   1        uint num=12;
+ 199   1        uint temp;
+ 200   1        P1=0xfe;   //first line
+ 201   1        temp=P1;
+ 202   1        temp=temp&0xf0;
+ 203   1        temp=temp&0xf0;
+ 204   1        while(temp!=0xf0)
+ 205   1        {
+ 206   2          delay(1000);
+ 207   2          temp=P1;
+ 208   2          temp&=0xf0;
+ 209   2          while(temp!=0xf0)
+ 210   2          {
+ 211   3            temp=P1;
+ 212   3            switch(temp)
+ 213   3            {
+ 214   4              case 0xee:num=1;
+ 215   4                break;
+ 216   4              case 0xde:num=2;
+ 217   4                break;
+ 218   4              case 0xbe:num=3;
+ 219   4                break;
+ 220   4              case 0x7e:num=4;
+ 221   4                break;
+ 222   4            }
+ 223   3            while(temp!=0xf0)
+ 224   3            {
+ 225   4              temp=P1;
+ 226   4              temp=temp&0xf0;
+ 227   4            }
+ 228   3          }
+ 229   2        }
+ 230   1        P1=0xfd;     //second line
+ 231   1        temp=P1;
+ 232   1        temp=temp&0xf0;
+ 233   1        temp=temp&0xf0;
+ 234   1        while(temp!=0xf0)
+ 235   1        {
+ 236   2          delay(1000);
+ 237   2          temp=P1;
+ 238   2          temp&=0xf0;
+ 239   2          while(temp!=0xf0)
+ 240   2          {
+ 241   3            temp=P1;
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 5   
+
+ 242   3            switch(temp)
+ 243   3            {
+ 244   4              case 0xed:num=5;
+ 245   4                break;
+ 246   4              case 0xdd:num=6;
+ 247   4                break;
+ 248   4              case 0xbd:num=7;
+ 249   4                break;
+ 250   4              case 0x7d:num=8;
+ 251   4                break;
+ 252   4            }
+ 253   3            while(temp!=0xf0)
+ 254   3            {
+ 255   4              temp=P1;
+ 256   4              temp=temp&0xf0;
+ 257   4            }
+ 258   3          }
+ 259   2        }
+ 260   1        P1=0xfb;    //third line
+ 261   1        temp=P1;
+ 262   1        temp=temp&0xf0;
+ 263   1        temp=temp&0xf0;
+ 264   1        while(temp!=0xf0)
+ 265   1        {
+ 266   2          delay(1000);
+ 267   2          temp=P1;
+ 268   2          temp&=0xf0;
+ 269   2          while(temp!=0xf0)
+ 270   2          {
+ 271   3            temp=P1;
+ 272   3            switch(temp)
+ 273   3            {
+ 274   4              case 0xeb:num=9;
+ 275   4                break;
+ 276   4              case 0xdb:num=0;
+ 277   4                break;
+ 278   4              case 0xbb:num=10; //小數點
+ 279   4                break;
+ 280   4              case 0x7b:num=11;   //負號
+ 281   4                break;
+ 282   4            }
+ 283   3            while(temp!=0xf0)
+ 284   3            {
+ 285   4              temp=P1;
+ 286   4              temp=temp&0xf0;
+ 287   4            }
+ 288   3          }
+ 289   2        }
+ 290   1        P1=0xf7;    //third line
+ 291   1        temp=P1;
+ 292   1        temp=temp&0xf0;
+ 293   1        temp=temp&0xf0;
+ 294   1        while(temp!=0xf0)
+ 295   1        {
+ 296   2          delay(1000);
+ 297   2          temp=P1;
+ 298   2          temp&=0xf0;
+ 299   2          while(temp!=0xf0)
+ 300   2          {
+ 301   3            temp=P1;
+ 302   3            switch(temp)
+ 303   3            {
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 6   
+
+ 304   4              case 0xe7:num=13;  //確定按鍵
+ 305   4                break;
+ 306   4            }
+ 307   3            while(temp!=0xf0)
+ 308   3            {
+ 309   4              temp=P1;
+ 310   4              temp=temp&0xf0;
+ 311   4            }
+ 312   3          }
+ 313   2        }
+ 314   1        return num;
+ 315   1      }
+ 316          
+ 317          
+ 318          void display(double sum)
+ 319          {
+ 320   1        uchar i;
+ 321   1        uint tt=500;
+ 322   1        uint smg[4];
+ 323   1        if(sum<0)
+ 324   1        { smg[0]=table[11]; sum=-sum; }
+ 325   1        else
+ 326   1          smg[0]=table[12];
+ 327   1        smg[1]=table[(int)sum/10];
+ 328   1        smg[2]=table[(int)sum%10]|0x80;
+ 329   1        smg[3]=table[(int)(10*sum)%10];
+ 330   1        while(tt--)
+ 331   1        {
+ 332   2        for(i=0;i<4;i++)
+ 333   2        {
+ 334   3          switch(i)
+ 335   3          {
+ 336   4            case(0):
+ 337   4              LSA=0;LSB=0;LSC=0; break;
+ 338   4            case(1):
+ 339   4              LSA=1;LSB=0;LSC=0; break;
+ 340   4            case(2):
+ 341   4              LSA=0;LSB=1;LSC=0; break;
+ 342   4            case(3):
+ 343   4              LSA=1;LSB=1;LSC=0; break;
+ 344   4          }
+ 345   3          P0=smg[i];
+ 346   3          delay(100);
+ 347   3          P0=0;
+ 348   3        }
+ 349   2        }   
+ 350   1      }
+ 351          
+ 352          void boil(uint rate)
+ 353          { 
+ 354   1        uint value=0;
+ 355   1        uint p=1;
+ 356   1        uint k;
+ 357   1        Timer1Init();  //定时器1初始化
+ 358   1        value=1000*rate/100;
+ 359   1        
+ 360   1        while(1)
+ 361   1        { 
+ 362   2          for(k=500;k>0;k--)
+ 363   2        {
+ 364   3           beep=~beep;
+ 365   3           delay(50);
+C51 COMPILER V9.59.0.0   PWM                                                               09/09/2018 16:23:10 PAGE 7   
+
+ 366   3        }
+ 367   2          if(timer1 >= 1000)  //PWM周期为1000*1us
+ 368   2          {
+ 369   3            timer1=0;
+ 370   3            p++;
+ 371   3            if(p >= 1000)
+ 372   3              break;
+ 373   3          }
+ 374   2          if(timer1 < value)  
+ 375   2            PWM=1;
+ 376   2          else
+ 377   2            PWM=0;  
+ 378   2        }   
+ 379   1      }
+ 380          
+ 381          void Timer1Init()
+ 382          {
+ 383   1        TMOD|=0X10;//选择为定时器1模式，工作方式1，仅用TR1打开启动。
+ 384   1      
+ 385   1        TH1 = 0xFF; 
+ 386   1        TL1 = 0xff;   //1us
+ 387   1          
+ 388   1        ET1=1;//打开定时器1中断允许
+ 389   1        EA=1;//打开总中断
+ 390   1        TR1=1;//打开定时器      
+ 391   1      }
+ 392          
+ 393          void Time1(void) interrupt 3    //3 为定时器1的中断号  1 定时器0的中断号 0 外部中断1 2 外部中断2  4 串口中
+             -断
+ 394          {
+ 395   1        TH1 = 0xFF; 
+ 396   1        TL1 = 0xff;   //1us
+ 397   1        timer1++; 
+ 398   1      }
+*** WARNING C294 IN LINE 120 OF pwm.c: unreachable code
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2353    ----
+   CONSTANT SIZE    =     42    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      2      84
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)
